@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-950 text-slate-100">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OmniCite — Multi-Source RAG Q&A Studio</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              200: '#c7d2fe',
+              300: '#a5b4fc',
+              400: '#818cf8',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+              800: '#3730a3',
+              900: '#312e81',
+            }
+          }
+        }
+      }
+    };
+  </script>
+
+  <!-- Marked.js for Markdown parsing -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+
+<body class="h-full flex flex-col bg-[#090d16] text-slate-100 antialiased overflow-hidden">
+
+  <!-- ================= TOP APP BAR ================= -->
+  <header class="h-16 flex-shrink-0 border-b border-slate-800/80 bg-slate-900/60 backdrop-blur-md px-6 flex items-center justify-between z-20">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 via-indigo-500 to-purple-500 flex items-center justify-center shadow-lg shadow-brand-500/20 ring-1 ring-white/20">
+        <!-- Sparkle / Brain Icon -->
+        <svg class="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+        </svg>
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <h1 class="text-lg font-bold tracking-tight text-white flex items-center gap-2">
+            OmniCite <span class="text-xs uppercase tracking-widest px-2 py-0.5 rounded-full bg-brand-500/20 text-brand-300 font-semibold border border-brand-500/30">RAG Studio</span>
+          </h1>
+        </div>
+        <p class="text-xs text-slate-400">PDF, Website & Raw Text Q&amp;A with Citations</p>
+      </div>
+    </div>
+
+    <!-- Center/Right Badges & Active Document indicator -->
+    <div class="flex items-center gap-3">
+      <!-- Active Document Chip -->
+      <div id="activeDocChip" class="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800/90 border border-slate-700 text-xs">
+        <span class="text-slate-400">Active Document:</span>
+        <span id="activeDocChipTitle" class="font-semibold text-brand-300 max-w-[200px] truncate">None</span>
+        <span id="activeDocChipChunks" class="px-1.5 py-0.2 rounded bg-slate-700 text-slate-300 text-[10px] font-mono">0 chunks</span>
+      </div>
+
+      <!-- System Health Indicator -->
+      <div id="systemHealthBadge" class="flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-medium">
+        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+        <span id="systemHealthText">API Connected</span>
+      </div>
+
+      <!-- Model Badge -->
+      <div class="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-800 border border-slate-700 text-slate-300 text-xs font-mono">
+        <svg class="w-3.5 h-3.5 text-purple-400" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 14.5h-2v-2h2zm0-4h-2V7h2z"/>
+        </svg>
+        <span id="modelNameBadge">Gemini</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ================= MAIN BODY SPLIT ================= -->
+  <div class="flex-1 flex overflow-hidden">
+
+    <!-- ================= LEFT SIDEBAR (Ingestion + Documents) ================= -->
+    <aside class="w-full md:w-[440px] flex-shrink-0 border-r border-slate-800/80 bg-slate-900/40 flex flex-col overflow-hidden">
+      
+      <!-- INGESTION SECTION -->
+      <div class="p-4 border-b border-slate-800/80">
+        <div class="flex items-center justify-between mb-3">
+          <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Ingest Knowledge</span>
+          <span class="text-[11px] text-slate-500">800-char chunks • 150 overlap</span>
+        </div>
+
+        <!-- Ingestion Tabs (PDF, URL, Text) -->
+        <div class="grid grid-cols-3 gap-1 bg-slate-950/60 p-1 rounded-xl border border-slate-800 mb-4">
+          <button id="tabPdfBtn" onclick="switchIngestTab('pdf')" class="py-2 text-xs font-medium rounded-lg transition-all flex items-center justify-center gap-1.5 bg-brand-600 text-white shadow-sm">
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+            </svg>
+            PDF File
+          </button>
+          <button id="tabUrlBtn" onclick="switchIngestTab('url')" class="py-2 text-xs font-medium rounded-lg transition-all flex items-center justify-center gap-1.5 text-slate-400 hover:text-slate-200">
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+            </svg>
+            Website
+          </button>
+          <button id="tabTextBtn" onclick="switchIngestTab('text')" class="py-2 text-xs font-medium rounded-lg transition-all flex items-center justify-center gap-1.5 text-slate-400 hover:text-slate-200">
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            Raw Text
+          </button>
+        </div>
+
+        <!-- FORM 1: PDF UPLOAD -->
+        <form id="formPdf" onsubmit="handlePdfSubmit(event)" class="space-y-3">
+          <!-- Dropzone -->
+          <div id="pdfDropzone" class="dropzone relative border-2 border-dashed border-slate-700 hover:border-brand-500 rounded-xl p-4 text-center cursor-pointer transition-all bg-slate-950/40">
+            <input type="file" id="pdfFileInput" accept=".pdf" class="hidden" onchange="handlePdfFileChange(this)" />
+            <div id="pdfEmptyState" class="space-y-1">
+              <div class="w-10 h-10 mx-auto rounded-full bg-slate-800 flex items-center justify-center text-slate-400">
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                </svg>
+              </div>
+              <p class="text-xs font-medium text-slate-300">Click to upload or drag &amp; drop PDF</p>
+              <p class="text-[11px] text-slate-500">Up to 15MB • Extracts pages &amp; citations</p>
+            </div>
+            <!-- File selected preview -->
+            <div id="pdfFilePreview" class="hidden flex items-center justify-between bg-slate-800/80 p-2 rounded-lg border border-slate-700">
+              <div class="flex items-center gap-2 overflow-hidden text-left">
+                <span class="p-1.5 rounded bg-rose-500/20 text-rose-400">
+                  <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clip-rule="evenodd" />
+                  </svg>
+                </span>
+                <div>
+                  <p id="pdfFileName" class="text-xs font-semibold text-slate-200 truncate max-w-[200px]">file.pdf</p>
+                  <p id="pdfFileSize" class="text-[10px] text-slate-400 font-mono">0 KB</p>
+                </div>
+              </div>
+              <button type="button" onclick="clearPdfFile(event)" class="text-slate-400 hover:text-rose-400 p-1">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <input type="text" id="pdfTitleInput" placeholder="Custom document title (optional)" class="w-full text-xs px-3 py-2 rounded-lg bg-slate-950/80 border border-slate-800 focus:outline-none focus:border-brand-500 text-slate-200 placeholder-slate-500" />
+          </div>
+
+          <button type="submit" id="pdfSubmitBtn" class="w-full py-2.5 px-4 rounded-lg bg-brand-600 hover:bg-brand-500 font-medium text-xs text-white transition-all flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">
+            <span id="pdfBtnText">Index &amp; Vectorize PDF</span>
+            <div id="pdfSpinner" class="hidden w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+          </button>
+        </form>
+
+        <!-- FORM 2: URL INGESTION -->
+        <form id="formUrl" onsubmit="handleUrlSubmit(event)" class="hidden space-y-3">
+          <div>
+            <label class="block text-[11px] font-medium text-slate-400 mb-1">Web Page URL</label>
+            <input type="url" id="urlInput" required placeholder="https://example.com/article" class="w-full text-xs px-3 py-2 rounded-lg bg-slate-950/80 border border-slate-800 focus:outline-none focus:border-brand-500 text-slate-200 placeholder-slate-500" />
+            <p class="text-[10px] text-slate-500 mt-1">Extracts clean text, headers, and section citations via Cheerio.</p>
+          </div>
+          <div>
+            <input type="text" id="urlTitleInput" placeholder="Custom document title (optional)" class="w-full text-xs px-3 py-2 rounded-lg bg-slate-950/80 border border-slate-800 focus:outline-none focus:border-brand-500 text-slate-200 placeholder-slate-500" />
+          </div>
+          <button type="submit" id="urlSubmitBtn" class="w-full py-2.5 px-4 rounded-lg bg-indigo-600 hover:bg-indigo-500 font-medium text-xs text-white transition-all flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">
+            <span id="urlBtnText">Scrape &amp; Index Webpage</span>
+            <div id="urlSpinner" class="hidden w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+          </button>
+        </form>
+
+        <!-- FORM 3: RAW TEXT INGESTION -->
+        <form id="formText" onsubmit="handleTextSubmit(event)" class="hidden space-y-3">
+          <div>
+            <label class="block text-[11px] font-medium text-slate-400 mb-1">Paste Text Content</label>
+            <textarea id="rawTextInput" required rows="4" placeholder="Paste your article, report, or notes here. You can optionally use markers like [Page 1] ... [Page 2] to preserve exact page citations." class="w-full text-xs px-3 py-2 rounded-lg bg-slate-950/80 border border-slate-800 focus:outline-none focus:border-brand-500 text-slate-200 placeholder-slate-500 font-mono"></textarea>
+          </div>
+          <div>
+            <input type="text" id="rawTextTitleInput" placeholder="Document title (optional)" class="w-full text-xs px-3 py-2 rounded-lg bg-slate-950/80 border border-slate-800 focus:outline-none focus:border-brand-500 text-slate-200 placeholder-slate-500" />
+          </div>
+          <button type="submit" id="textSubmitBtn" class="w-full py-2.5 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-500 font-medium text-xs text-white transition-all flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">
+            <span id="textBtnText">Index &amp; Vectorize Text</span>
+            <div id="textSpinner" class="hidden w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+          </button>
+        </form>
+      </div>
+
+      <!-- KNOWLEDGE BASE / DOCUMENTS LIST -->
+      <div class="flex-1 flex flex-col overflow-hidden">
+        <div class="px-4 py-3 border-b border-slate-800/80 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-300">Knowledge Base</h2>
+            <span id="docCountBadge" class="px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-400 text-[10px] font-mono">0</span>
+          </div>
+          <button onclick="fetchDocuments()" title="Refresh documents" class="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors">
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
+        </div>
+
+        <!-- Filter Search Bar -->
+        <div class="px-4 py-2 border-b border-slate-800/60 bg-slate-950/30">
+          <div class="relative">
+            <input type="text" id="docSearchInput" oninput="filterDocuments()" placeholder="Search documents..." class="w-full text-xs pl-8 pr-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-brand-500" />
+            <svg class="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
+        </div>
+
+        <!-- Scrollable Document Cards List -->
+        <div id="documentsList" class="flex-1 overflow-y-auto p-3 space-y-2.5">
+          <!-- Dynamic Document Cards will be rendered here -->
+          <div class="text-center py-8 text-slate-500 text-xs">
+            <p>Loading documents...</p>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ================= RIGHT MAIN AREA (Interactive Q&A Studio) ================= -->
+    <main class="flex-1 flex flex-col bg-[#0b0f19] overflow-hidden">
+      
+      <!-- ACTIVE DOCUMENT BANNER -->
+      <div id="activeDocBanner" class="px-6 py-3 border-b border-slate-800/80 bg-slate-900/30 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div id="activeDocSourceIcon" class="w-8 h-8 rounded-lg bg-brand-500/20 text-brand-400 flex items-center justify-center font-bold text-xs uppercase">
+            RAG
+          </div>
+          <div>
+            <h2 id="activeDocMainTitle" class="text-sm font-semibold text-slate-100 flex items-center gap-2">
+              <span>No Document Selected</span>
+            </h2>
+            <p id="activeDocMeta" class="text-xs text-slate-400">
+              Select or ingest a document on the left panel to begin question answering.
+            </p>
+          </div>
+        </div>
+
+        <div id="activeDocActions" class="hidden flex items-center gap-2">
+          <button onclick="openChunksModal(activeDocumentId)" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-slate-700 transition-colors flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5 text-brand-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+            </svg>
+            Inspect Chunks
+          </button>
+          <button onclick="clearChatHistory()" class="px-3 py-1.5 rounded-lg bg-slate-800/60 hover:bg-slate-800 text-slate-400 hover:text-slate-200 text-xs font-medium border border-slate-700/60 transition-colors flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+            Clear Chat
+          </button>
+        </div>
+      </div>
+
+      <!-- CHAT CONVERSATION AREA -->
+      <div id="chatScrollContainer" class="flex-1 overflow-y-auto px-6 py-6 space-y-6">
+        
+        <!-- Welcome / Empty State (when no document or first loaded) -->
+        <div id="emptyWorkspaceState" class="max-w-xl mx-auto py-12 text-center space-y-6">
+          <div class="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-tr from-brand-600/30 via-indigo-500/20 to-purple-500/20 border border-brand-500/30 flex items-center justify-center text-brand-400 shadow-xl shadow-brand-500/10">
+            <svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+            </svg>
+          </div>
+          <div class="space-y-2">
+            <h3 class="text-lg font-bold text-slate-100">Welcome to OmniCite RAG Studio</h3>
+            <p class="text-xs text-slate-400 leading-relaxed">
+              Upload a PDF document, scrape any website URL, or paste raw text. Once ingested, OmniCite extracts chunk citations and answers queries strictly grounded in your content using cosine vector similarity and Gemini.
+            </p>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-left pt-2">
+            <div class="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800/80">
+              <div class="w-7 h-7 rounded-lg bg-rose-500/20 text-rose-400 flex items-center justify-center text-xs font-bold mb-2">PDF</div>
+              <h4 class="text-xs font-semibold text-slate-200">Page-Accurate</h4>
+              <p class="text-[11px] text-slate-400 mt-1">Extracts exact page markers ([Page 1], [Page 2]) to cite sources reliably.</p>
+            </div>
+            <div class="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800/80">
+              <div class="w-7 h-7 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xs font-bold mb-2">URL</div>
+              <h4 class="text-xs font-semibold text-slate-200">Section Scraper</h4>
+              <p class="text-[11px] text-slate-400 mt-1">Scrapes readable web content and tags chunks with section headings.</p>
+            </div>
+            <div class="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800/80">
+              <div class="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs font-bold mb-2">0.60</div>
+              <h4 class="text-xs font-semibold text-slate-200">No Hallucinations</h4>
+              <p class="text-[11px] text-slate-400 mt-1">Guardrail rejects queries if top cosine similarity falls below 0.60 threshold.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Chat messages will be dynamically appended here -->
+        <div id="messagesContainer" class="space-y-6 max-w-4xl mx-auto"></div>
+
+      </div>
+
+      <!-- SUGGESTED QUESTIONS BAR -->
+      <div id="suggestedQuestionsBar" class="hidden px-6 py-2 border-t border-slate-800/60 bg-slate-900/40">
+        <div class="max-w-4xl mx-auto flex items-center gap-2 overflow-x-auto pb-1">
+          <span class="text-[10px] uppercase font-bold text-slate-500 flex-shrink-0">Suggested:</span>
+          <button onclick="askPresetQuestion('Summarize the key highlights from this document.')" class="px-2.5 py-1 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs whitespace-nowrap transition-colors border border-slate-700/60">
+            📄 Summarize document
+          </button>
+          <button onclick="askPresetQuestion('What are the key points and takeaways?')" class="px-2.5 py-1 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs whitespace-nowrap transition-colors border border-slate-700/60">
+            💡 Key takeaways
+          </button>
+          <button onclick="askPresetQuestion('Give me a breakdown of the main topics covered.')" class="px-2.5 py-1 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs whitespace-nowrap transition-colors border border-slate-700/60">
+            🔍 Main topics
+          </button>
+        </div>
+      </div>
+
+      <!-- INPUT BAR -->
+      <div class="p-4 border-t border-slate-800/80 bg-slate-900/60 backdrop-blur-sm">
+        <form id="askForm" onsubmit="handleAskSubmit(event)" class="max-w-4xl mx-auto relative flex items-end gap-2 bg-slate-950/80 border border-slate-700/80 focus-within:border-brand-500 rounded-2xl p-2 transition-all shadow-lg">
+          <textarea
+            id="questionInput"
+            rows="1"
+            placeholder="Ask a question about the active document... (Enter to send, Shift+Enter for new line)"
+            class="flex-1 bg-transparent px-3 py-2 text-xs md:text-sm text-slate-100 placeholder-slate-500 focus:outline-none resize-none max-h-32 leading-relaxed"
+            onkeydown="handleTextareaKeydown(event)"
+            oninput="autoResizeTextarea(this)"
+          ></textarea>
+          
+          <button
+            type="submit"
+            id="sendBtn"
+            class="p-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0 shadow-md shadow-brand-500/20"
+          >
+            <svg id="sendIcon" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+            </svg>
+            <div id="sendSpinner" class="hidden w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+          </button>
+        </form>
+        <div class="max-w-4xl mx-auto mt-2 flex items-center justify-between text-[11px] text-slate-500 px-1">
+          <span>Similarity guardrail: 0.60 • Context window: Top-5 retrieved chunks</span>
+          <span id="charCount">0 characters</span>
+        </div>
+      </div>
+
+    </main>
+
+  </div>
+
+  <!-- ================= SOURCE PREVIEW MODAL ================= -->
+  <div id="sourcePreviewModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg flex flex-col shadow-2xl overflow-hidden animate-fade-in">
+      <div class="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between bg-slate-950/50">
+        <div class="flex items-center gap-2">
+          <span class="w-6 h-6 rounded-lg bg-brand-500/20 text-brand-400 flex items-center justify-center text-xs">📄</span>
+          <div>
+            <h4 id="sourcePreviewLocator" class="text-xs font-bold text-white font-mono">[Page 1]</h4>
+            <p id="sourcePreviewScore" class="text-[10px] text-slate-400 font-mono"></p>
+          </div>
+        </div>
+        <button onclick="closeSourcePreviewModal()" class="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+      <div class="p-5">
+        <label class="block text-[10px] uppercase font-bold text-slate-500 tracking-wider mb-1.5">Grounded Context Snippet</label>
+        <div class="bg-slate-950/80 p-3.5 rounded-xl border border-slate-800/80">
+          <p id="sourcePreviewSnippet" class="text-xs text-slate-200 leading-relaxed font-mono whitespace-pre-wrap select-text"></p>
+        </div>
+      </div>
+      <div class="px-5 py-3 border-t border-slate-800/80 bg-slate-950/40 flex justify-end">
+        <button onclick="closeSourcePreviewModal()" class="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= CHUNKS INSPECTOR MODAL ================= -->
+  <div id="chunksModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-3xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+      <!-- Modal Header -->
+      <div class="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/40">
+        <div>
+          <h3 class="text-sm font-bold text-white flex items-center gap-2">
+            <span>Extracted Document Chunks</span>
+            <span id="modalChunksCountBadge" class="px-2 py-0.5 rounded-full bg-brand-500/20 text-brand-300 text-xs font-mono">0</span>
+          </h3>
+          <p id="modalDocTitle" class="text-xs text-slate-400 mt-0.5 truncate max-w-md"></p>
+        </div>
+        <button onclick="closeChunksModal()" class="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <!-- Modal Filter / Search -->
+      <div class="px-6 py-2 border-b border-slate-800/80 bg-slate-950/20">
+        <input type="text" id="chunksSearchInput" oninput="filterModalChunks()" placeholder="Filter chunk content or locator (e.g. Page 2)..." class="w-full text-xs px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-brand-500" />
+      </div>
+
+      <!-- Modal Body -->
+      <div id="modalChunksBody" class="flex-1 overflow-y-auto p-6 space-y-4">
+        <!-- Chunks list rendered dynamically -->
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= TOAST NOTIFICATION CONTAINER ================= -->
+  <div id="toastContainer" class="fixed bottom-6 right-6 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- App Script -->
+  <script src="/js/app.js"></script>
+</body>
+</html>
+

@@ -1,0 +1,20 @@
+{
+  "name": "omnicite-rag-api",
+  "version": "1.0.0",
+  "description": "OmniCite: Multi-source (PDF, Website, Text) RAG Q&A API with Express, MongoDB Vector Search, and Gemini",
+  "main": "src/app.js",
+  "scripts": {
+    "start": "node src/app.js",
+    "dev": "node src/app.js"
+  },
+  "dependencies": {
+    "@google/genai": "^1.0.0",
+    "cheerio": "^1.0.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "mongoose": "^8.10.1",
+    "multer": "^1.4.5-lts.1",
+    "pdf-parse": "^1.1.1"
+  }
+}
